@@ -1,0 +1,74 @@
+dataset=thunderbird
+version=20261021-train-v3
+coverage=fit_train_plus_public_knowledge
+evaluation_role=train_derived_card
+release=sallog-0.1.0
+
+Thunderbird 训练知识卡
+范围：本项目 Thunderbird_10M 排除验证集后的 360,000 个实际训练窗口，含 1,031 个已见模板；不使用测试/验证标签或其他数据范围的标签结论。公开资料只补充任务定义及系统机制。
+下列非告警/告警指训练事件标注，不代表现实无故障或故障根因。须核对完整消息、来源、函数和关键状态，不能按大类豁免。正常经验只解释其覆盖的行为；未覆盖的现象继续结合自身知识和当前参考推断。判决与弃权统一按 C 提示词执行。
+
+T-TB-01｜公开定义与检测单位
+Loghub Thunderbird 的 '-' 表示非告警，其他类别表示告警。[P1] 本项目以固定 20 行为窗口，出现任一任务告警即异常；不能从异常窗口反推每一行都有异常点标签。
+窗口可混合主机、设备、传感器和操作；另一对象的成功或恢复不解释当前失败。
+
+T-TB-02｜Local Catastrophic Error 须读函数
+下列训练消息都含 InfiniHost0、failed, return code = -254 (Fatal error (Local Catastrophic Error))，但口径不同：
+• [tsIbTavorMadProcess] ... EVAPI_process_local_mad：302,513 条告警。
+• [tsIbTavorPortQuery] ... VAPI_query_hca_port_prop：34 条非告警。
+• [tsIbTavorGidQuery] ... VAPI_query_hca_gid_tbl：8 条非告警。
+三者被同一模板合并。核对完整调用上下文、函数、返回码和错误说明；不能用 Fatal、-254 或相同 EventId 直接分类，未列函数不套用。
+
+T-TB-03｜ib_mad_dispatch 与 EVAPI 处理不同
+kernel: [KERNEL_IB][ib_mad_dispatch]...mad_process failed (...) for InfiniHost0 ... QPN ... (class ..., aid ...) 在训练中 302,533 条均非告警，且会与其他告警同窗。
+这是指定分发函数的消息，不是 T-TB-02 的 EVAPI_process_local_mad。比较函数、阶段及 QPN/class/aid；共现不能反向改变该行点标签。
+
+T-TB-04｜THH 固件与设备状态消息
+以下 kernel: THH(...) 来源的完整函数/结果组合在训练中有非告警口径：
+• get_fatal_err_syndrome: FW CATASTR ERRBUF<索引> = <值>。
+• XHH_hob_process_local_mad / XHH_hob_query / XHH_hob_query_port_prop / XHH_hob_get_gid_tbl / XHH_hob_register_mr: Device in FATAL state。
+• XHH_hob_fatal_err_thread: FATAL ERROR DETECTED IN WAKE-UP，或 RECEIVED FATAL ERROR WAKEUP。
+• XHH_hob_fatal_error: Fatal Event Syndrome = <符号> (<值>)，或 device=InfiniHost0, err_type=<值>, syndrome=<值>。
+• XHH_hob_query_port_prop: cmdif returned FATAL。
+• Failed command <命令> (<名称>): status=0x103 (0x0103 - unexpected error - fatal)。
+核对来源、完整函数与结果，不能把所有 THH 或 FATAL 消息统一判正常。这些报告仍可描述实际设备问题；寄存器位定义未知时不补造。它们也不能覆盖 EVAPI 的独立告警。
+
+T-TB-05｜温度报告
+Server Administrator: Instrumentation Service ... Temperature sensor detected a warning value ... BMC Ambient Temp ... Previous state was: OK (Normal)，以及 returned to a normal value ... BMC Ambient Temp ... Previous state was: Non-Critical (Warning)，在训练中为非告警。
+核对传感器、动作、实际数值和前态；warning 不自动表示高温，不由观察到的温度值反推设备阈值。恢复仅属于对应传感器，不能证明其他操作恢复；未知传感器/动作不只凭 temperature 一词沿用。
+
+T-TB-06｜Buffer I/O 与 EXT3、SCSI 的区别
+训练非告警形态：kernel: Buffer I/O error on device <设备>, logical block <块>（33 条）；kernel: lost page write due to I/O error on <设备>（25 条）。实际语义仍是 I/O/写入问题，不等于成功或已恢复。
+训练告警形态：EXT3-fs error ... ext3_journal_start_sb: Detected aborted journal；ext3_get_inode_loc ... Aborting journal on device sda3；ext3_get_inode_loc: unable to read inode block - inode=..., block=...；EXT3-fs error ... in ... IO failure；... in start_transaction: Journal has aborted；scsi0 (...) rejecting I/O to offline device。
+保留完整动作、文件系统/设备和调用阶段；不能把它们合并成同一种 I/O 错误，也不据此断定物理硬盘损坏。
+
+T-TB-07｜内存 critical 与 non-critical
+小样本训练观察：Memory device status is critical，原因 Single bit error logging disabled（DIMM1_B/DIMM2_B），或同时含 Single bit warning error rate exceeded、Single bit failure error rate exceeded（DIMM1_A），共 4 条告警。
+Memory device status is non-critical ... Single bit warning error rate exceeded（DIMM1_A），有 2 条非告警。
+匹配完整状态、位置和原因；仅有 single bit、rate exceeded 或其他设备的 critical 不套用。公开 RAS 文档区分已纠正、未纠正、致命错误，不能用“单比特一般可纠正”替代当前的完整状态。[P2]
+
+T-TB-08｜Voltage Bad 仅有一个训练组合
+训练非告警消息：Server Administrator: Instrumentation Service EventID: 1154 Voltage sensor detected a failure value Sensor location: BMC ROMB Battery Chassis location: Main System Chassis Previous state was: OK (Normal) Discrete voltage state: Bad，共 44 条。
+本条只覆盖该来源、传感器、前态与 Bad 组合。训练没有为其他传感器或前态建立同样口径；不得扩展到所有 Voltage Bad，也不得称为电压正常、误报或已修复。
+
+T-TB-09｜采集形式经验：Losing some ticks
+kernel: Losing some ticks... checking if CPU frequency changed. 在训练中有 12 条告警；没有 kernel: 前缀的同正文形式有 2 条非告警。
+只在完整来源确实保留时使用这一有限经验，不能将渲染器移除前缀当证据。这不是“kernel 必异常”的系统机制，checking if 也不证明频率已变化。
+
+T-TB-10｜segfault 与认证失败
+kernel: <进程> segfault at <地址> rip <地址> rsp <地址> error <值>，及无 kernel: 前缀的同形态，在训练中共 9,886 条均非告警。公开 signal 文档说明 SIGSEGV 与无效内存访问有关；非告警标签不改变其进程故障语义。[P3]
+训练也有以下具体非告警认证消息：login(pam_unix)... authentication failure；login... FAILED LOGIN ... Authentication failure；sshd... Failed password for ... ssh2；sshd... Password authentication for user ... failed；... authentication failed. Login to account ... not allowed or account non-existent；auths-pam ... SSH_PAM_OP_ERROR ... Authentication failure。
+核对来源、动作及用户/主机/结果，不扩大为所有崩溃或安全事件正常。Accepted/session opened 也只说明对应操作，不能证明全窗口正常。
+
+T-TB-11｜其他高频失败文字的训练例外
+以下完整来源/动作在训练中均有非告警口径：
+• ib_sm.x ... ib_sm_discovery.c ... Failed to GetNodeInfo() because of NO RESPONSE；Failed to GetPortInfo() - hop_count ... direct_path ...；Failed discover node test, node ... port_num ... error code ...。
+• sshd... error: Bind to port ... on ... failed: Address already in use。
+• mount 或 mount.panfs: bindcache: failed init IPS: 0x5 (Out of memory)。
+• kernel: There is already a security framework initialized, register_security failed。
+这些例外不证明操作成功；相同 failed/Out of memory 发生在其他组件、阶段或原因时不套用。
+
+公开机制来源：
+[P1] https://raw.githubusercontent.com/logpai/loghub/master/Thunderbird/README.md
+[P2] https://docs.kernel.org/6.5/admin-guide/ras.html
+[P3] https://man7.org/linux/man-pages/man7/signal.7.html

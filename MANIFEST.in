@@ -1,0 +1,5 @@
+include README.md LICENSE THIRD_PARTY_NOTICES.md requirements-tested.txt .env.example .gitignore
+recursive-include configs *.yaml
+recursive-include tests *.py
+recursive-include src/sallog/prompts *.txt
+recursive-include src/sallog/knowledge_cards *.txt

@@ -1,0 +1,76 @@
+dataset=bgl
+version=20261021-train-v3
+coverage=fit_train_plus_public_knowledge
+evaluation_role=train_derived_card
+release=sallog-0.1.0
+
+BGL 训练知识卡
+范围：仅统计排除验证集后的 169,685 个实际训练窗口，含 309 个已见事件模板；不使用测试标签、测试事件统计或其他数据范围的标签结论。公开来源只解释任务定义和系统机制。
+先理解本卡，再结合自身知识和当前带标签参考核对目标。下述“非告警/告警”是可迁移的训练经验，须核对适用条件；非告警也不代表现实无故障。规则只解释匹配的行为，不能覆盖同窗其他异常。判决与弃权统一按 C 提示词执行。
+
+T-BGL-01｜公开定义与检测单位
+Loghub 说明原始首列 '-' 是非告警，其他类别是告警；它与日志正文和 Level 字段不同。[P1]
+本项目按原始行序切固定 20 行窗口，含任一任务告警即窗口异常。窗口可能混合节点和操作；关联事件须核对对象和先后，不能把另一对象成功视作当前恢复。
+
+T-BGL-02｜纠错报告不是所有硬件错误的统一标签
+训练中 instruction cache parity error corrected、ddr errors(s) detected and corrected on rank 0, symbol ... bit ...、total of ... ddr error(s) detected and corrected、data cache ... parity error detected. attempting to correct 均有非告警口径。
+corrected 表示该次纠正，attempting 只表示尝试。公开 RAS 文档也区分已纠正与未纠正错误；该机制解释不能代替具体数据集标签。[P2]
+训练中的 L3 correctable errors exceeds threshold、number of corrected SRAM errors has exceeded threshold，以及明确提到 multiple symbols over the correctable error threshold, consider replacing the card 的 ddr 报告为非告警观察。保留完整动作，不自设次数或温度等阈值。
+告警对照：ddr: redundant bit steering failed, sequencer timeout 与 L3 major internal error 各 1 条；external input interrupt (unit=0x02 bit=0x00): uncorrectable torus error 有 2 条。均为窄范围训练观察，不泛化到所有 ddr、interrupt 或 error。
+
+T-BGL-03｜诊断字段与实际中断
+machine check enable...0/1、floating point instr. enabled...0/1、i-cache parity error...0 是训练中已见非告警字段；machine check interrupt、floating point unavailable interrupt 是不同的告警事件。program interrupt: fp cr field...0 / fp cr update...0 也是字段报告，不能当成 program interrupt 本身。
+读完整事件名、动作和参数；不能按同一 EventId、寄存器非零或 error/fatal 一个词定类。
+
+T-BGL-04｜日志级别的训练经验与适用范围
+原句记录实际事件，Level 是记录级别，应结合阅读。INFO 中的 timeout 仍表示发生超时，不能改写为操作成功，也不能仅按 timeout 判为任务告警。
+本训练子集的 INFO 记录均为非告警。这是跨已见事件的正常方向训练证据，可参与未见模板的综合判断，不能因模板未见而忽略。结合组件、具体操作及同窗其他事件，证据更支持非告警且无更强反证时，可判 normal；不要求参考包含相同事件或预先证明其标签。
+INFO 不是无条件正常白名单；已核实的具体告警形态或更强的异常证据仍须采用。FATAL 也有本卡列出的非告警实例，不能让级别或错误词单独覆盖完整事件。
+具体事件对照：训练中完全相同正文的 data storage interrupt、program interrupt，INFO 为非告警，FATAL 为告警；该级别差异已在这两个事件中核实。
+Microloader Assertion 只观察到 FATAL 告警，训练没有支持其其他级别应如何标注。
+
+T-BGL-05｜明确内核失败的训练口径
+data TLB error interrupt、rts panic! - stopping execution、kernel panic、rts: kernel terminated for reason ...、machine check interrupt，以及 DDR machine check register: <值> <值> 在训练中为告警事件。核对完整动作与参数，不由附带地址或结束行消除已发生事件。
+训练还见 2 条告警：rts assertion failed: `personality->version == BGLPERSONALITY_VERSION' in `void start()' at start.cc:131。须匹配该断言及位置，不套用 T-BGL-08 的其他断言例外。
+反例：KERNEL/FATAL 的完整短消息 rts internal error 在训练中有 1,956 条非告警；它不同于上述 panic、terminated 或明确 interrupt。不能将所有 rts 报错归为一类。
+
+T-BGL-06｜CioStream 前缀读取失败
+训练告警形态：ciod: failed to read message prefix on control stream (CioStream socket to <端点>；以及 ciod: Error reading message prefix after LOGIN_MESSAGE on CioStream socket to <端点>: Link has been severed。
+核对 ciod、控制流/登录阶段、前缀读取失败和连接对象。其他原因、其他阶段或只有 socket 名称时，不直接沿用本条。终止与通信失败即使有因果关系，也不自动说明失败是非告警。
+
+T-BGL-07｜超时报告与实际通信失败
+训练中的 MMCS/ERROR 短消息 Ido packet timeout 有非告警记录；MailboxMonitor::serviceMailboxes() lib_ido_error: -1019 socket closed，以及 -1033 BGLERR_IDO_PKT_TIMEOUT connection lost to node... card 为告警。须保留组件、函数、错误码和动作，不能只匹配 timeout。
+job <作业> timed out. Block freed. 在训练中也为非告警；Block freed 表示释放，不证明作业成功。上述经验不自动适用于其他超时操作。
+
+T-BGL-08｜ASSERT 与 core 的精确例外
+ciod: generated <数量> core files for program <程序> 在训练中为非告警。idoproxydb hit ASSERT condition: ASSERT 的以下组合也为非告警观察：
+• expression=0；file=idotransportmgr.cpp；line=1043；Function=int IdoTransportMgr::SendPacket(IdoUdpMgr*, BglCtlPavTrace*)。
+• expression=!(nMsgLen > 0x10000)；file=idomarshalerio.cpp；line=1929；Function=int IdoMarshalerRecvBuffer::ReadBlock(IdoMsg::IdoMsgHdr*&)；仅 2 条。
+• expression=!(RecvMsgHdr.ulLen > 0x10000)；file=idomarshalerio.cpp；line=387；Function=virtual int IdoMarshalerIo::RunRecv()；仅 1 条。
+这不表示断言未失败或程序正常。未列出的 expression、函数或组件不能只凭 ASSERT 套用。
+
+T-BGL-09｜node map 必须保留错误原因
+ciod: Error creating node map from file <路径>: <原因> 的训练观察：
+非告警：Bad file descriptor、Block device required、Permission denied、Bad address。
+告警：No child processes、Cannot allocate memory、Resource temporarily unavailable、Device or resource busy。
+这些是同操作的具体原因区别，不是“配置错误都正常”；未知原因不借用其他原因的标签。ciod 的 Unexpected eof at line ... of node map file ...、coordinate ... exceeds physical dimension ...、Error opening node map file ... No such file or directory 也有训练非告警实例，须匹配实际动作。
+另有训练非告警形态：ciod: Missing or invalid fields on line 1 of node map file <路径>；ciod: duplicate canonical-rank 31 to logical-rank 0 mapping at line 3 of node map file <路径>。保留实际动作、行号和映射关系，不扩展为所有映射错误正常。
+
+T-BGL-10｜LOGIN 与程序镜像
+训练中 ciod: LOGIN chdir(<路径>) failed: Permission denied，以及 ciod: LOGIN ... failed: No such file or directory 为非告警观察。
+ciod: Error loading <程序>: invalid or missing program image, No such file or directory / Permission denied / Exec format error，以及 program image too big 的具体报告也为非告警。核对程序、失败原因及大小比较；不能改写为加载成功，也不扩展到未知错误原因。
+
+T-BGL-11｜挂载重试与明确失败
+训练中 NFS Mount failed on ... slept ... seconds, retrying (...) 为非告警；retrying 不等于完成。
+Error: unable to mount filesystem、Lustre mount FAILED : ... : point ...、Lustre mount FAILED : ... : block_id : location 为训练告警。区分文件系统、阶段和实际结果。
+
+T-BGL-12｜退出、信号与状态汇总
+小样本训练观察：ciodb exited normally with exit code 0 为非告警，exit code 15 为告警，各 1 条；mmcs_server exited normally with exit code 1/13/15 为告警。仅适用于这些服务/代码组合，不能把 exit code 直接当信号编号。
+mmcs_server/ciodb exited abnormally due to signal: Aborted 分别有 11/4 条训练告警；不能用 normally 或其他服务的正常退出例子覆盖。
+公开 signal 文档说明 SIGTERM 的默认动作是终止，不说明发送者意图；它本身不能确定本数据集标签。[P3]
+训练中完整 Node card status 汇总存在包含 PGOOD ERROR LATCH、NOT OK 的非告警实例；此观察只说明这些字段不能单独定类。未核实完整状态组合时，需当前参考或更多证据，不将整个前缀设为正常白名单。Power deactivated、no ethernet link 是另有训练告警支持的实际事件。
+
+来源：规则依据本卡首部限定的实际训练子集核对整理，公开机制来源列于下方。训练未覆盖的事件不补充其他数据范围的标签结论。
+[P1] https://raw.githubusercontent.com/logpai/loghub/master/BGL/README.md
+[P2] https://docs.kernel.org/6.5/admin-guide/ras.html
+[P3] https://man7.org/linux/man-pages/man7/signal.7.html

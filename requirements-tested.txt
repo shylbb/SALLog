@@ -1,0 +1,12 @@
+# Migration verification environment: CPython 3.13.5 on Windows; CPU tests.
+# Install a PyTorch distribution appropriate for your platform.
+numpy==2.1.3
+torch==2.12.0
+transformers==5.9.0
+scipy==1.15.3
+scikit-learn==1.6.1
+PyYAML==6.0.2
+joblib==1.4.2
+threadpoolctl==3.5.0
+pytest==8.3.4
+

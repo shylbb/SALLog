@@ -1,0 +1,63 @@
+dataset=hdfs
+version=20261021-train-v3
+coverage=fit_train_plus_public_knowledge
+evaluation_role=train_derived_card
+release=sallog-0.1.0
+
+HDFS 训练知识卡
+范围：仅统计排除验证集后的 414,043 个实际训练会话，含 400,400 个正常、13,643 个异常会话及 48 个已见模板。不使用测试或验证标签，也不补充其他数据范围的标签结论。
+以下标签经验均为会话级关联，不是逐行异常真值或因果证明。计数不作目标异常概率。先用自身知识理解完整目标，再核对规则与当前带标签参考；判决与弃权统一按 C 提示词执行。
+
+T-HDFS-01｜公开定义与对象关系
+Loghub HDFS_v1 按 block id 切分 trace，再给每条 trace 一个正常/异常标签。[P1] 会话标签重复存入事件数组只是数据表示，不表示其中每一行异常。
+按当前 block、端点角色、size、offset、操作阶段连接事件。分布式节点的日志聚合顺序不等于单节点协议顺序，不能仅凭相邻或表面先后推断因果。
+
+T-HDFS-02｜公开机制中的易错点
+副本数可配置，接收与转发可在数据流水线中并行；不能把所有环境固定为三个副本。Blockreport 是块清单报告，复制和删除也是 HDFS 的管理行为；发生复制或删除本身不证明故障或数据丢失。[P2]
+上述机制只帮助解释动作，不证明目标实际发生了成功恢复、删除竞态或某种配置。
+
+T-HDFS-03｜训练结构：接收与登记
+典型消息：Receiving block ... src ... dest ...；Received block ... of size ... from ...；NameSystem.addStoredBlock: blockMap updated: <端点> is added to <块> size <值>。
+全部训练正常会话都含这三类消息，Received ... of size ... from ... 均出现 3 次；但大量异常会话也有成功接收和登记。该结构是本采集的训练经验，不能当正常充分条件，也不能当 HDFS 通用副本配置。
+仅在目标明确完整时检查缺失；对齐同块、size 和端点后继续检查失败、重复登记、offset 变化及复制结果。单条成功或完整成功片段不代表整个会话正常。
+
+T-HDFS-04｜PacketResponder 结束与异常
+PacketResponder <编号> for block <块> terminating 可以是线程结束记录；解析模板还会合并其他末尾参数，须读原文。
+训练中普通 PacketResponder 模板同时出现在正常、异常会话。带 EOFException、Broken pipe、SocketTimeoutException、Connection reset 等实际异常的 PacketResponder Exception 是不同事件，不能用 terminating 统称抹去差异。
+
+T-HDFS-05｜训练异常关联：空包
+精确消息 Receiving empty packet for block <块> 出现于 298 个训练异常会话、0 个正常会话。目标同块同接收阶段出现这一事件时，是本数据的异常会话模式证据。
+后面有 Received、登记或删除，不能单独排除该模式；也不能仅凭一般“空包可表示收尾”否定训练经验。这不证明该行有人工点标签、接收 size 为零或块内容损坏。
+
+T-HDFS-06｜训练异常关联：明确写入和复制失败
+writeBlock ... received exception、Exception in receiveBlock、Exception writing block ... to mirror、Failed to transfer、PendingReplicationMonitor timed out block，以及带实际异常类型的 PacketResponder Exception，在训练中仅见于异常会话。
+其中 writeBlock ... Could not read from stream 对应 2,389 个训练异常会话，复制超时对应 39 个。核对具体操作、block、端点和异常类型；另一端点成功、最终删除或未知的恢复不能自动消除该支持，也不据一次 EOF/超时推断全网故障或块损坏。
+
+T-HDFS-07｜训练混合标签：读取服务 exception
+形态：<端点>:Got exception while serving <块> to /<请求端点>:。在正常与异常训练会话均存在，不等于 T-HDFS-06 的写入异常。
+检查读取阶段、同请求结果和其他会话证据。正文止于冒号时，具体异常原因未知；不能编造客户端正常断开，也不能只凭 exception 判异常。
+
+T-HDFS-08｜删除管理与 BlockInfo 缺失
+NameSystem.delete: <块> is added to invalidSet of <端点>、Deleting block <块> file <路径> 在正常和异常训练会话均存在。invalidSet 是删除管理术语，不等于块内容损坏。
+Unexpected error trying to delete block <块>. BlockInfo not found in volumeMap. 出现于 199 个正常、4,390 个异常训练会话。对齐同块、同端点的已有登记和删除过程；不能按 error 直接定类，也不能无依据称为无害重复清理。
+
+T-HDFS-09｜does not belong to any file 的动作区别
+NameSystem.addStoredBlock: addStoredBlock request received ... But it does not belong to any file. 出现于 12 个正常、1,111 个异常训练会话；同一句短语不足以分类，需检查登记、删除及参数关系。
+Removing block ... from neededReplications as it does not belong to any file. 是另一动作，仅见于 4 个训练异常会话，属于窄范围异常关联。不能将两个动作合并，也不能补造文件生命周期或删除竞态。
+
+T-HDFS-10｜Redundant addStoredBlock
+NameSystem.addStoredBlock: Redundant addStoredBlock request received for <块> on <端点> size <值>，出现于 3 个正常、712 个异常训练会话。
+它不是绝对异常词，也不是默认无害的幂等操作。比较当前 block、端点、size、已有与后续登记，指出重复或冲突的事实；结合其余会话证据判断，不将单个模板、一次成功或计数直接当作标签。
+
+T-HDFS-11｜频次、复制与校验
+Served block ... to ... 在正常训练会话中可出现 1～10 或 203 次；没有时间间隔与失败重试对应关系，不把重复自动解释为读取风暴。
+ask ... to replicate、Starting thread to transfer block、Transmitted block、Received block ... src ... dest ... of size ...、Verification succeeded 都在两类训练会话中出现。区分请求、启动、传输、接收、登记和校验结果；只看到启动不能声称完成，一条成功也不能覆盖其他阶段。
+
+T-HDFS-12｜其他训练异常关联
+Changing block file offset ... from ... to ... meta file offset to ...、Reopen Block ...、Adding an already existing block ... 分别仅见于 35、3、4 个训练异常会话。
+保留具体操作与前后值，核对是否涉及当前 block、是否与同阶段状态冲突。它们是有限训练关联，不是“offset 一变就异常”等无条件规则；不能被普通接收、复制成功消息直接覆盖。
+
+公开机制来源：
+[P1] https://raw.githubusercontent.com/logpai/loghub/master/HDFS/README.md
+[P2] https://hadoop.apache.org/docs/r1.2.1/hdfs_design.html
+

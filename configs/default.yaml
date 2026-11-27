@@ -1,0 +1,80 @@
+dataset:
+  name: bgl
+  # Paths are relative to THIS configuration file; absolute paths also work.
+  train: ../data/train.jsonl
+  validation: ../data/validation.jsonl
+  test: ../data/test.jsonl
+  templates: ../data/templates.csv
+  label_scope: fixed_window
+  max_len: 20 # Use 256 for HDFS block sessions.
+
+encoder:
+  model: BAAI/bge-small-en-v1.5
+  revision: 5c38ec7c405ec4b44b94cc5a9bb96e735b38267a
+  local_files_only: false
+  max_tokens: 128
+  batch_size: 32
+
+small_model:
+  channels: 128
+  kernel_size: 3
+  attention_heads: 4
+  dropout: 0.2
+
+training:
+  learning_rate: 0.001
+  batch_size: 256
+  weight_decay: 0.01
+  # Reproduction execution settings; these are not recovered historical totals.
+  max_epochs: 20
+  patience: 5
+  min_delta: 0.0001
+  seed: 42
+  device: auto
+  threads: 8
+
+calling:
+  budget: 0.01
+  neighbors: 50
+  exponent: 2.0
+  reference_size: 5000
+  seed: 42
+  tie_seed: 20250301
+  query_batch_size: 256
+
+knowledge:
+  min_size: 8000
+  max_size: 20000
+  cover_similarity: 0.90
+  coarse_clusters: 128
+  svd_components: 64
+  max_content_features: 200000
+  neighbor_count: 64
+  local_neighbors: 32
+  seed: 42
+  threads: 8
+  # Empty uses the bundled card matching dataset.name. Custom datasets need a card.
+  card_path: null
+
+acceptance:
+  threshold: -0.1
+
+llm:
+  endpoint: https://api.deepseek.com/chat/completions
+  model: deepseek-flash
+  api_key_env: DEEPSEEK_API_KEY
+  max_tokens: 16384
+  timeout_seconds: 300
+  interval_seconds: 0.3
+  max_input_bytes: 120000
+  max_response_bytes: 4000000
+  # These provider-specific parameters can be changed for another compatible API.
+  extra_body:
+    thinking:
+      type: enabled
+    reasoning_effort: high
+
+explanation:
+  # Missing explanations require an explicit `explain --execute` command.
+  generate_missing: false
+
