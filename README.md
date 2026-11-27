@@ -1,6 +1,6 @@
-# SALlog
+# SALLog
 
-SALlog combines the LogCMA detector with selective LLM review for log anomaly detection.
+SALLog combines the LogCMA detector with selective LLM review for log anomaly detection.
 It ranks prepared samples by risk and uses labeled training references and a knowledge card to review selected cases before applying an acceptance gate.
 
 ## Prepare data
