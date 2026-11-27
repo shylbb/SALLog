@@ -37,7 +37,7 @@ The first run may download encoder weights. It prepares reviews and writes provi
 
 ## Optional LLM review
 
-Set `DEEPSEEK_API_KEY` in your shell. With `--execute`, SALlog sends the selected log text, allowed context fields, and labeled training references to the configured API. The run stores request bodies and replies in `responses.sqlite`.
+Set `DEEPSEEK_API_KEY` in your shell. With `--execute`, SALLog sends the selected log text, allowed context fields, and labeled training references to the configured API. The run stores request bodies and replies in `responses.sqlite`.
 
 ```bash
 sallog review --run outputs/run01/review --execute --limit 10
